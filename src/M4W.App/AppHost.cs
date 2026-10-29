@@ -11,10 +11,11 @@ namespace M4W.App;
 internal sealed class AppHost : IDisposable
 {
     private readonly ILog _log;
-    private readonly AppSettings _settings;
+    private AppSettings _settings;
     private readonly SqliteHistoryStore _store;
     private readonly HistoryService _history;
     private readonly CaptureService _capture;
+    private readonly TypingCaptureService _typing;
     private readonly MessageWindow _messages;
     private readonly PopupWindow _popup;
     private readonly TrayIcon _tray;
@@ -32,6 +33,8 @@ internal sealed class AppHost : IDisposable
         _store = SqliteHistoryStore.OpenOrRecover(AppPaths.Database, new DpapiProtector(), log);
         _history = new HistoryService(_store, _settings.MaxItems, log);
         _capture = new CaptureService(_history, _settings, log);
+        _typing = new TypingCaptureService(_history, () => _settings, () => _capture.Paused, log);
+        _typing.AutoOffTriggered += OnTypingAutoOff;
 
         _popup = new PopupWindow(_history, _settings.FuzzyByDefault);
         _popup.ItemChosen += OnItemChosen;
@@ -43,6 +46,7 @@ internal sealed class AppHost : IDisposable
         _tray = new TrayIcon(SafeAutostartState());
         _tray.OpenRequested += ShowPopup;
         _tray.PauseChanged += OnPauseChanged;
+        _tray.CaptureTypingChanged += OnCaptureTypingChanged;
         _tray.ClearRequested += OnClearRequested;
         _tray.AutostartChanged += OnAutostartChanged;
         _tray.AboutRequested += ShowAbout;
@@ -69,6 +73,7 @@ internal sealed class AppHost : IDisposable
     public void Dispose()
     {
         _showWait?.Unregister(null);
+        _typing.Dispose(); // removes the keyboard hook before anything else goes away
         _tray.Dispose();
         _messages.Dispose();
         _popup.Close();
@@ -143,6 +148,22 @@ internal sealed class AppHost : IDisposable
         _capture.Paused = paused;
         _tray.SetPaused(paused);
         _log.Info(paused ? "capture paused" : "capture resumed");
+    }
+
+    private void OnCaptureTypingChanged(bool on)
+    {
+        if (on) _typing.Start();
+        else _typing.Stop();
+        _tray.SetCapturingTyping(_typing.IsCapturing);
+    }
+
+    /// <summary>The idle timer turned capture off by itself; reflect that in the tray and tell Vitaly once.</summary>
+    private void OnTypingAutoOff()
+    {
+        _typing.Stop();
+        _tray.SetCapturingTyping(false);
+        _tray.ShowInfoBalloon("Typing capture turned off (idle)");
+        _log.Info("typing capture auto-off (idle)");
     }
 
     private void OnClearRequested()

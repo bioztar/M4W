@@ -60,12 +60,16 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <Image Source="{Binding Thumbnail}" Visibility="{Binding ThumbnailVisibility}"
                                    MaxHeight="56" MaxWidth="120" Margin="0,0,10,0" />
                             <TextBlock Grid.Column="1" Text="{Binding Preview}" TextTrimming="CharacterEllipsis"
                                        Foreground="{StaticResource Fg}" VerticalAlignment="Center" />
-                            <TextBlock Grid.Column="2" Text="📌" Visibility="{Binding PinVisibility}" Margin="8,0,0,0"
+                            <TextBlock Grid.Column="2" Text="⌨" Visibility="{Binding TypedVisibility}" Margin="8,0,0,0"
+                                       Foreground="{StaticResource Dim}" VerticalAlignment="Center"
+                                       ToolTip="Typed, not copied" />
+                            <TextBlock Grid.Column="3" Text="📌" Visibility="{Binding PinVisibility}" Margin="8,0,0,0"
                                        VerticalAlignment="Center" />
                         </Grid>
                     </DataTemplate>

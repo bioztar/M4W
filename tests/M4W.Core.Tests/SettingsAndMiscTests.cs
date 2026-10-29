@@ -17,12 +17,13 @@ public class SettingsTests
         Assert.Equal(30, s.TypingIdleOffMinutes);
         Assert.True(s.TypingSkipPasswordFields);
         Assert.Equal(3, s.MinTypedChars);
+        Assert.Equal(2, s.IdleFlushSeconds);
     }
 
     [Fact]
     public void ValidFileIsHonoured()
     {
-        var s = SettingsLoader.Parse("""{"Hotkey":"ctrl+shift+F5","MaxItems":50,"FuzzyByDefault":false,"AutoPaste":false,"RespectPrivateFlag":true,"TypingIdleOffMinutes":45,"TypingSkipPasswordFields":false,"MinTypedChars":5}""", NullLog.Instance);
+        var s = SettingsLoader.Parse("""{"Hotkey":"ctrl+shift+F5","MaxItems":50,"FuzzyByDefault":false,"AutoPaste":false,"RespectPrivateFlag":true,"TypingIdleOffMinutes":45,"TypingSkipPasswordFields":false,"MinTypedChars":5,"IdleFlushSeconds":4}""", NullLog.Instance);
         Assert.Equal("ctrl+shift+F5", s.Hotkey);
         Assert.Equal(50, s.MaxItems);
         Assert.False(s.FuzzyByDefault);
@@ -31,6 +32,7 @@ public class SettingsTests
         Assert.Equal(45, s.TypingIdleOffMinutes);
         Assert.False(s.TypingSkipPasswordFields);
         Assert.Equal(5, s.MinTypedChars);
+        Assert.Equal(4, s.IdleFlushSeconds);
     }
 
     [Fact]
@@ -78,6 +80,8 @@ public class SettingsTests
     [InlineData("""{"MinTypedChars":-1}""")]
     [InlineData("""{"MinTypedChars":1001}""")]
     [InlineData("""{"CaptureTyping":"on"}""")]
+    [InlineData("""{"IdleFlushSeconds":0}""")]
+    [InlineData("""{"IdleFlushSeconds":301}""")]
     public void BadValueFallsBackToDefaultAndLogs(string json)
     {
         var log = new ListLog();

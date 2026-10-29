@@ -11,6 +11,8 @@ public sealed record AppSettings
     public const int MaxTypingIdleOffMinutes = 1440;
     public const int MinMinTypedChars = 0;
     public const int MaxMinTypedChars = 1000;
+    public const int MinIdleFlushSeconds = 1;
+    public const int MaxIdleFlushSeconds = 300;
 
     public string Hotkey { get; init; } = DefaultHotkey;
     public int MaxItems { get; init; } = 1000;
@@ -28,6 +30,8 @@ public sealed record AppSettings
     public bool TypingSkipPasswordFields { get; init; } = true;
     /// <summary>A typed chunk shorter than this (e.g. a single keystroke) is discarded, not stored.</summary>
     public int MinTypedChars { get; init; } = 3;
+    /// <summary>Seconds of no typing before the current buffer is flushed as its own entry.</summary>
+    public int IdleFlushSeconds { get; init; } = 2;
 }
 
 public static class SettingsLoader
@@ -85,6 +89,7 @@ public static class SettingsLoader
                 TypingIdleOffMinutes = ReadInt(root, nameof(AppSettings.TypingIdleOffMinutes), d.TypingIdleOffMinutes, AppSettings.MinTypingIdleOffMinutes, AppSettings.MaxTypingIdleOffMinutes, log),
                 TypingSkipPasswordFields = ReadBool(root, nameof(AppSettings.TypingSkipPasswordFields), d.TypingSkipPasswordFields, log),
                 MinTypedChars = ReadInt(root, nameof(AppSettings.MinTypedChars), d.MinTypedChars, AppSettings.MinMinTypedChars, AppSettings.MaxMinTypedChars, log),
+                IdleFlushSeconds = ReadInt(root, nameof(AppSettings.IdleFlushSeconds), d.IdleFlushSeconds, AppSettings.MinIdleFlushSeconds, AppSettings.MaxIdleFlushSeconds, log),
             };
         }
     }
