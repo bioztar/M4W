@@ -88,6 +88,7 @@ internal sealed class AppHost : IDisposable
         _showWait?.Unregister(null);
         _typing.Dispose(); // removes the keyboard hook before anything else goes away
         _snippetHotkeys.Dispose();
+        _snippetFillLock.Dispose();
         _tray.Dispose();
         _messages.Dispose();
         _popup.Close();
@@ -189,10 +190,24 @@ internal sealed class AppHost : IDisposable
         FillSnippetAsync(snippet, target);
     }
 
+    /// <summary>
+    /// One fill at a time: a second hotkey pressed while a fill is mid-flight would read the first
+    /// fill's value off the clipboard as "the previous contents" and restore that instead of the real
+    /// previous clipboard. Rather than queue it (which could paste a snippet into the wrong field
+    /// minutes later), a trigger that arrives while busy is just dropped.
+    /// </summary>
+    private readonly SemaphoreSlim _snippetFillLock = new(1, 1);
+
     private async void FillSnippetAsync(Snippet snippet, IntPtr target)
     {
+        if (!_snippetFillLock.Wait(0))
+        {
+            _log.Warn($"snippet '{snippet.Name}' trigger dropped: another fill is already in progress");
+            return;
+        }
         try { await SnippetFiller.FillAsync(snippet, target, _log); }
         catch (Exception ex) { _log.Error("snippet fill failed", ex); } // async void: must not escape
+        finally { _snippetFillLock.Release(); }
     }
 
     private void OnSettingsRequested()
