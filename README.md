@@ -10,7 +10,7 @@ Inspired by [Maccy](https://github.com/p0deje/Maccy) for macOS, not affiliated.
 - Press **Ctrl+Alt+V** anywhere: a popup opens next to the cursor with the search box focused. Pick an item and it is pasted straight into the window you were in.
 - Fuzzy search by default (`kbctl` finds `kubectl`), with an exact-substring toggle.
 - Keeps the last 1000 items. Pinned items are never dropped.
-- **Opt-in typing capture**: turn it on from the tray before filling a long form, and what you *type* (not just copy) is saved too, split one entry per field. Off by default, auto-off after idle, never recorded for password fields.
+- **Opt-in typing capture**: turn it on from the tray before filling a long form, and what you *type* (not just copy) is saved too, split one entry per field. Off by default, auto-off after idle. Records **everything typed while on, including passwords** — that's deliberate (DPAPI-encrypted at rest, same as everything else); an optional setting can skip password fields if you ever want that instead.
 - **Snippets**: saved values behind their own global hotkey (e.g. your email address, or a password), filled into whatever field has focus. Edited from the in-app Settings window.
 - One portable `M4W.exe`. No installer, no admin rights.
 
@@ -41,7 +41,9 @@ Tray: left-click opens the popup. Right-click: Open history, Pause capture, Capt
 
 Off by default. Tick **Capture typing** in the tray before filling a long form: the tray icon gets a red dot and the tooltip says "M4W — capturing typing". From then on, what you type is split into its own history entry on Enter, Tab, switching fields, or ~2 seconds of no typing, and stored with a small **⌨** marker in the popup so you can tell it apart from a copy. A chunk under 3 characters, or empty/whitespace, isn't stored.
 
-Untick it (tray, or it turns itself off after 30 minutes idle — with a one-time balloon) and the keyboard hook is removed immediately; nothing typed before or after is in `m4w.log`. A focused password field is never recorded while capturing (`TypingSkipPasswordFields`, on by default) — if the password-field check itself fails for any reason, M4W treats the field as a password and skips it rather than risk recording one.
+Untick it (tray, or it turns itself off after 30 minutes idle — with a one-time balloon) and the keyboard hook is removed immediately; nothing typed before or after is in `m4w.log`.
+
+By design, typing capture records **everything you type while it's on, passwords included** — that's the point, it's for recovering exactly what you typed into a long form, and passwords are what you forget. It's encrypted at rest the same as every other entry. If you'd rather it skipped password fields, set `TypingSkipPasswordFields: true` (default `false`) — if that check itself fails for any reason, M4W treats the field as a password and skips it rather than risk recording one.
 
 ## Snippets
 
@@ -52,7 +54,7 @@ A snippet is a saved value behind its own global hotkey: press it anywhere, and 
 | Email | `Ctrl+Shift+R` | No |
 | Password | `Ctrl+Shift+E` | Yes |
 
-A secret snippet's value renders masked (`••••••••`) in Settings until you press **Reveal**. Filling a snippet never touches history or the log: the value only ever goes briefly onto the clipboard (tagged so M4W's own capture ignores it), and whatever was on the clipboard before is put back about 300ms after the paste — or cleared, if it can't be restored exactly — so nothing lingers.
+A secret snippet's value renders masked (`••••••••`) in Settings until you press **Reveal**. Filling a snippet never touches history or the log: the value only ever goes briefly onto the clipboard (tagged so M4W's own capture ignores it), and whatever was on the clipboard before is put back about a second after the paste — or cleared, if it can't be restored, so nothing lingers. Only a **text or image** clipboard is restored; if what you had copied before was something else (files, rich formats from some apps), it's cleared rather than silently lost half-restored. A second snippet hotkey pressed while a fill is still in flight is dropped, not queued.
 
 Open **Settings…** from the tray to add, edit or delete snippets, set their hotkey (click the box, press the keys), and change the main popup hotkey and every other setting below. Save checks for hotkey clashes and bad values before applying; Cancel discards every edit.
 
@@ -80,7 +82,7 @@ Everything is under `%LOCALAPPDATA%\M4W\`:
   "AutoPaste": true,
   "RespectPrivateFlag": false,
   "TypingIdleOffMinutes": 30,
-  "TypingSkipPasswordFields": true,
+  "TypingSkipPasswordFields": false,
   "MinTypedChars": 3,
   "IdleFlushSeconds": 2
 }
@@ -94,7 +96,7 @@ Everything is under `%LOCALAPPDATA%\M4W\`:
 | `AutoPaste` | `true` | Ctrl+V is sent automatically after picking an item |
 | `RespectPrivateFlag` | `false` | Skip copies password managers mark private |
 | `TypingIdleOffMinutes` | `30` | Typing capture turns itself off after this long with no keystrokes (1–1440) |
-| `TypingSkipPasswordFields` | `true` | Never record a focused password field while capturing typing |
+| `TypingSkipPasswordFields` | `false` | If set `true`, never record a focused password field while capturing typing (by default, passwords ARE captured — see Typing capture above) |
 | `MinTypedChars` | `3` | A typed chunk shorter than this is discarded (0–1000) |
 | `IdleFlushSeconds` | `2` | Seconds of no typing before the current chunk is stored as its own entry (1–300) |
 
