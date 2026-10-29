@@ -88,7 +88,12 @@ internal sealed class TypingCaptureService : IDisposable
 
     public void Dispose() => Stop();
 
-    /// <summary>The hook proc: forwards immediately, reads the key, then hands off to the dispatcher. Never blocks.</summary>
+    /// <summary>
+    /// The hook proc: forwards immediately, then does its state-dependent reading (modifiers, real scan
+    /// code, the foreground window's layout) right here at keystroke time — not after dispatching, by
+    /// which point the physical key state may have moved on — and only hands the already-translated
+    /// result to the dispatcher. Still never blocks: every step here is a cheap, non-blocking user32 call.
+    /// </summary>
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
         var result = Native.CallNextHookEx(_hookHandle, nCode, wParam, lParam);
@@ -99,11 +104,14 @@ internal sealed class TypingCaptureService : IDisposable
 
         var info = Marshal.PtrToStructure<Native.KBDLLHOOKSTRUCT>(lParam);
         if ((info.Flags & Native.LLKHF_INJECTED) != 0) return result; // synthetic (e.g. our own snippet paste): never captured
-        _dispatcher.BeginInvoke(() => OnKeyDown(info.VkCode));
+
+        var vk = info.VkCode;
+        char? ch = vk is Native.VK_RETURN or Native.VK_TAB or Native.VK_BACK ? null : TranslateChar(vk, info.ScanCode);
+        _dispatcher.BeginInvoke(() => OnKeyEvent(vk, ch));
         return result;
     }
 
-    private void OnKeyDown(uint vk)
+    private void OnKeyEvent(uint vk, char? ch)
     {
         if (_buffer is null) return;
         _lastKeystroke = DateTimeOffset.UtcNow;
@@ -113,7 +121,6 @@ internal sealed class TypingCaptureService : IDisposable
             case Native.VK_TAB: FlushAndStore(TypingBoundary.Tab); return;
             case Native.VK_BACK: _buffer.Backspace(); return;
         }
-        var ch = TranslateChar(vk);
         if (ch is not null) _buffer.AppendChar(ch.Value);
     }
 
@@ -162,17 +169,34 @@ internal sealed class TypingCaptureService : IDisposable
         }
     }
 
-    // ponytail: scan code is passed as 0, so dead keys / some non-US layouts may translate wrongly.
-    // Upgrade path if that bites: carry the real scan code from KBDLLHOOKSTRUCT.ScanCode into ToUnicodeEx.
-    private static char? TranslateChar(uint vk)
+    /// <summary>
+    /// Translates a keystroke using the real modifier/caps-lock state and the real scan code, both read
+    /// right now rather than later off the (wrong-thread) UI queue — <c>GetKeyboardState</c> reports
+    /// M4W's own thread, not the app the user is actually typing into, which is how this used to come
+    /// out lowercase with shift/caps lost. <c>TOUNICODE_DO_NOT_CHANGE_STATE</c> keeps dead-key state
+    /// untouched so the user's own typing isn't corrupted by our reading it.
+    /// </summary>
+    private static char? TranslateChar(uint vk, uint scanCode)
     {
         var keyState = new byte[256];
-        if (!Native.GetKeyboardState(keyState)) return null;
+        SetKeyFlag(keyState, Native.VK_SHIFT);
+        SetKeyFlag(keyState, Native.VK_CONTROL);
+        SetKeyFlag(keyState, Native.VK_MENU);
+        if ((Native.GetKeyState(Native.VK_CAPITAL) & 1) != 0) keyState[Native.VK_CAPITAL] = 1;
+
+        var foreground = Native.GetForegroundWindow();
+        var foregroundThreadId = Native.GetWindowThreadProcessId(foreground, out _);
+        var layout = Native.GetKeyboardLayout(foregroundThreadId);
+
         var buffer = new StringBuilder(8);
-        var layout = Native.GetKeyboardLayout(0);
-        var rc = Native.ToUnicodeEx(vk, 0, keyState, buffer, buffer.Capacity, 0, layout);
+        var rc = Native.ToUnicodeEx(vk, scanCode, keyState, buffer, buffer.Capacity, Native.TOUNICODE_DO_NOT_CHANGE_STATE, layout);
         if (rc <= 0 || buffer.Length == 0) return null;
         var c = buffer[0];
         return char.IsControl(c) ? null : c;
+    }
+
+    private static void SetKeyFlag(byte[] keyState, int vk)
+    {
+        if ((Native.GetAsyncKeyState(vk) & 0x8000) != 0) keyState[vk] = 0x80;
     }
 }

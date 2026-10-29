@@ -20,8 +20,26 @@ internal static class Native
     public const int VK_BACK = 0x08;
     public const int VK_RETURN = 0x0D;
     public const int VK_TAB = 0x09;
+    public const int VK_SHIFT = 0x10;
+    public const int VK_CONTROL = 0x11;
+    public const int VK_MENU = 0x12; // Alt
+    public const int VK_CAPITAL = 0x14;
+    public const int VK_LWIN = 0x5B;
+    public const int VK_RWIN = 0x5C;
     /// <summary>KBDLLHOOKSTRUCT.Flags bit set for SendInput-generated keystrokes (our own paste, or anyone else's).</summary>
     public const uint LLKHF_INJECTED = 0x10;
+    /// <summary>ToUnicodeEx flag: translate without touching the per-thread dead-key state, so we never corrupt the user's own typing.</summary>
+    public const uint TOUNICODE_DO_NOT_CHANGE_STATE = 0x4;
+
+    [DllImport("user32.dll")]
+    public static extern short GetAsyncKeyState(int vKey);
+
+    [DllImport("user32.dll")]
+    public static extern short GetKeyState(int vKey);
+
+    /// <summary>Changes each time the clipboard's content changes; used to tell whether a snippet fill's paste read the clipboard without anyone else touching it since.</summary>
+    [DllImport("user32.dll")]
+    public static extern uint GetClipboardSequenceNumber();
 
     public delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 
@@ -49,10 +67,6 @@ internal static class Native
     public static extern IntPtr GetModuleHandle(string? lpModuleName);
 
     [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool GetKeyboardState(byte[] lpKeyState);
-
-    [DllImport("user32.dll")]
     public static extern int ToUnicodeEx(uint wVirtKey, uint wScanCode, byte[] lpKeyState,
         System.Text.StringBuilder pwszBuff, int cchBuff, uint wFlags, IntPtr dwhkl);
 
@@ -75,7 +89,6 @@ internal static class Native
 
     private const uint INPUT_KEYBOARD = 1;
     private const uint KEYEVENTF_KEYUP = 0x0002;
-    private const ushort VK_CONTROL = 0x11;
     private const ushort VK_V = 0x56;
 
     [DllImport("user32.dll", SetLastError = true)]
@@ -198,10 +211,10 @@ internal static class Native
     {
         INPUT[] inputs =
         [
-            Key(VK_CONTROL, 0),
+            Key((ushort)VK_CONTROL, 0),
             Key(VK_V, 0),
             Key(VK_V, KEYEVENTF_KEYUP),
-            Key(VK_CONTROL, KEYEVENTF_KEYUP),
+            Key((ushort)VK_CONTROL, KEYEVENTF_KEYUP),
         ];
         return SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>()) == inputs.Length;
     }
