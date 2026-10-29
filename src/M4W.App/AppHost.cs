@@ -89,7 +89,9 @@ internal sealed class AppHost : IDisposable
         // window (and our own window can be it too); there is no real target then, so clear it rather
         // than reuse a stale one: the pick is then only put on the clipboard, never pasted.
         _previousWindow = IsPasteTarget(foreground) ? foreground : IntPtr.Zero;
-        _popup.ShowAtCursor();
+        if (_popup.ShowAtCursor()) return;
+        _log.Warn("popup could not take focus, hidden again");
+        _tray.ShowBalloon("Windows would not let M4W take focus. Try the hotkey again.");
     }
 
     private static bool IsPasteTarget(IntPtr hwnd)

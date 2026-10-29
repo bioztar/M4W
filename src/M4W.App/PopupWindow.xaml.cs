@@ -4,6 +4,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using M4W.Core;
 
@@ -27,7 +28,11 @@ public partial class PopupWindow : Window
     /// <summary>Raised when the user picks an item (Enter or double-click). The popup has already hidden itself.</summary>
     internal event Action<ClipEntry>? ItemChosen;
 
-    internal void ShowAtCursor()
+    /// <summary>
+    /// Shows the popup and takes focus. Returns false (popup hidden again) if Windows would not let us
+    /// activate: a topmost window that has no focus can't be typed into or dismissed with Esc.
+    /// </summary>
+    internal bool ShowAtCursor()
     {
         _suppressRefresh = true;
         SearchBox.Text = string.Empty;
@@ -36,8 +41,15 @@ public partial class PopupWindow : Window
         PlaceNearCursor();
         Show();
         Activate();
+        if (!IsActive) Native.ForceForeground(new WindowInteropHelper(this).Handle);
+        if (!IsActive)
+        {
+            Hide();
+            return false;
+        }
         SearchBox.Focus();
         Keyboard.Focus(SearchBox);
+        return true;
     }
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)

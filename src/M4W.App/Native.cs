@@ -61,6 +61,38 @@ internal static class Native
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, [MarshalAs(UnmanagedType.Bool)] bool attach);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool BringWindowToTop(IntPtr hwnd);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
+
+    /// <summary>
+    /// Forces <paramref name="hwnd"/> to the foreground when plain SetForegroundWindow is refused, by
+    /// briefly sharing input state with the current foreground thread.
+    /// </summary>
+    public static void ForceForeground(IntPtr hwnd)
+    {
+        var foreground = GetForegroundWindow();
+        var foregroundThread = foreground == IntPtr.Zero ? 0 : GetWindowThreadProcessId(foreground, out _);
+        var thisThread = GetCurrentThreadId();
+        var attached = foregroundThread != 0 && foregroundThread != thisThread && AttachThreadInput(thisThread, foregroundThread, true);
+        try
+        {
+            BringWindowToTop(hwnd);
+            SetForegroundWindow(hwnd);
+        }
+        finally
+        {
+            if (attached) AttachThreadInput(thisThread, foregroundThread, false);
+        }
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool AllowSetForegroundWindow(int processId);
 
     /// <summary>ASFW_ANY: lets the already-running instance take focus when a second launch pokes it.</summary>
