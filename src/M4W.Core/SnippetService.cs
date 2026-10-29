@@ -49,6 +49,19 @@ public sealed class SnippetService
         Changed?.Invoke();
     }
 
+    /// <summary>Inserts <paramref name="s"/> if its id is new, otherwise updates the existing row. Used when a batch of edits (e.g. from the Settings window) is committed at once.</summary>
+    public Snippet Put(Snippet s)
+    {
+        if (_items.Any(x => x.Id == s.Id)) Update(s);
+        else
+        {
+            _store.Insert(s);
+            _items = [.. _items, s];
+            Changed?.Invoke();
+        }
+        return s;
+    }
+
     public void Delete(string id)
     {
         if (_items.All(x => x.Id != id)) return;

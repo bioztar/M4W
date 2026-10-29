@@ -97,8 +97,9 @@ internal sealed class TypingCaptureService : IDisposable
         var msg = wParam.ToInt32();
         if (msg is not (Native.WM_KEYDOWN or Native.WM_SYSKEYDOWN)) return result; // keyup carries nothing new
 
-        var vk = Marshal.PtrToStructure<Native.KBDLLHOOKSTRUCT>(lParam).VkCode;
-        _dispatcher.BeginInvoke(() => OnKeyDown(vk));
+        var info = Marshal.PtrToStructure<Native.KBDLLHOOKSTRUCT>(lParam);
+        if ((info.Flags & Native.LLKHF_INJECTED) != 0) return result; // synthetic (e.g. our own snippet paste): never captured
+        _dispatcher.BeginInvoke(() => OnKeyDown(info.VkCode));
         return result;
     }
 

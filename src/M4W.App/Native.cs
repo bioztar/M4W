@@ -20,6 +20,8 @@ internal static class Native
     public const int VK_BACK = 0x08;
     public const int VK_RETURN = 0x0D;
     public const int VK_TAB = 0x09;
+    /// <summary>KBDLLHOOKSTRUCT.Flags bit set for SendInput-generated keystrokes (our own paste, or anyone else's).</summary>
+    public const uint LLKHF_INJECTED = 0x10;
 
     public delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 

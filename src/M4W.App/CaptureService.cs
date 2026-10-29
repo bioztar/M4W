@@ -8,12 +8,12 @@ namespace M4W.App;
 internal sealed class CaptureService
 {
     private readonly HistoryService _history;
-    private readonly AppSettings _settings;
+    private readonly Func<AppSettings> _settings;
     private readonly ILog _log;
     private bool _busy;
     private bool _again;
 
-    public CaptureService(HistoryService history, AppSettings settings, ILog log)
+    public CaptureService(HistoryService history, Func<AppSettings> settings, ILog log)
     {
         _history = history;
         _settings = settings;
@@ -51,7 +51,7 @@ internal sealed class CaptureService
     {
         var snap = await ClipboardAccess.ReadAsync(_log);
         if (snap is null || snap.IsOwn) return;
-        if (snap.IsPrivate && _settings.RespectPrivateFlag) return;
+        if (snap.IsPrivate && _settings().RespectPrivateFlag) return;
 
         if (snap.Text is not null) _history.AddText(snap.Text);
         else if (snap.Png is not null) _history.AddImage(snap.Png);

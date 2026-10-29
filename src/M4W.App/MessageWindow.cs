@@ -30,6 +30,8 @@ internal sealed class MessageWindow : IDisposable
 
     public event Action? ClipboardUpdated;
     public event Action? HotkeyPressed;
+    /// <summary>A snippet hotkey fired; the id is whatever <see cref="RegisterSnippetHotkey"/> was called with.</summary>
+    public event Action<int>? SnippetHotkeyPressed;
 
     /// <summary>Registers the global hotkey; returns false (and logs) if another app already owns it.</summary>
     public bool RegisterHotkey(Hotkey hotkey)
@@ -40,6 +42,12 @@ internal sealed class MessageWindow : IDisposable
         if (!_hotkeyRegistered) _log.Error($"RegisterHotKey({hotkey.Modifiers}+{hotkey.Key}) failed; another app may own it");
         return _hotkeyRegistered;
     }
+
+    /// <summary>Registers a snippet's hotkey under caller-chosen <paramref name="id"/> (distinct from the popup's own). Returns false if taken.</summary>
+    public bool RegisterSnippetHotkey(int id, Hotkey hotkey) =>
+        Native.RegisterHotKey(_source.Handle, id, (uint)hotkey.Modifiers | Native.MOD_NOREPEAT, (uint)hotkey.VirtualKey);
+
+    public void UnregisterSnippetHotkey(int id) => Native.UnregisterHotKey(_source.Handle, id);
 
     public void Dispose()
     {
@@ -59,6 +67,10 @@ internal sealed class MessageWindow : IDisposable
                 break;
             case Native.WM_HOTKEY when wParam.ToInt32() == HotkeyId:
                 HotkeyPressed?.Invoke();
+                handled = true;
+                break;
+            case Native.WM_HOTKEY:
+                SnippetHotkeyPressed?.Invoke(wParam.ToInt32());
                 handled = true;
                 break;
         }

@@ -25,7 +25,15 @@ public sealed class HistoryService
         Load();
     }
 
-    public int MaxItems { get; }
+    public int MaxItems { get; private set; }
+
+    /// <summary>Changes the retention limit live and immediately trims if the new limit is smaller.</summary>
+    public void SetMaxItems(int maxItems)
+    {
+        MaxItems = maxItems;
+        EnforceRetention();
+        Changed?.Invoke();
+    }
 
     /// <summary>Current items, most recently used first. The list is replaced, never mutated, on every change.</summary>
     public IReadOnlyList<ClipEntry> Items => _items;

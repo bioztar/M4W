@@ -105,6 +105,20 @@ public class SnippetServiceTests
     }
 
     [Fact]
+    public void PutInsertsNewAndUpdatesExisting()
+    {
+        var svc = Make();
+        var before = svc.Items.Count;
+        var created = new Snippet("fixed-id", "New", "test-value", "Ctrl+Shift+Z", IsSecret: false);
+        svc.Put(created);
+        Assert.Equal(before + 1, svc.Items.Count);
+
+        svc.Put(created with { Value = "test-value-2" });
+        Assert.Equal(before + 1, svc.Items.Count); // still an update, not a second insert
+        Assert.Equal("test-value-2", svc.Items.Single(s => s.Id == "fixed-id").Value);
+    }
+
+    [Fact]
     public void AddUpdateDeleteChangeTheInMemoryList()
     {
         var svc = Make();

@@ -28,6 +28,14 @@ public partial class PopupWindow : Window
     /// <summary>Raised when the user picks an item (Enter or double-click). The popup has already hidden itself.</summary>
     internal event Action<ClipEntry>? ItemChosen;
 
+    /// <summary>Applies a Settings change live, without recreating the popup.</summary>
+    internal void SetFuzzyDefault(bool fuzzyByDefault)
+    {
+        _suppressRefresh = true;
+        ExactToggle.IsChecked = !fuzzyByDefault;
+        _suppressRefresh = false;
+    }
+
     /// <summary>
     /// Shows the popup and takes focus. Returns false (popup hidden again) if Windows would not let us
     /// activate: a topmost window that has no focus can't be typed into or dismissed with Esc.
