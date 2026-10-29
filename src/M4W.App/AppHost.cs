@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Windows;
@@ -11,10 +12,14 @@ namespace M4W.App;
 internal sealed class AppHost : IDisposable
 {
     private readonly ILog _log;
-    private readonly AppSettings _settings;
+    private AppSettings _settings;
     private readonly SqliteHistoryStore _store;
     private readonly HistoryService _history;
+    private readonly SnippetStore _snippetStore;
+    private readonly SnippetService _snippets;
+    private readonly SnippetHotkeyManager _snippetHotkeys;
     private readonly CaptureService _capture;
+    private readonly TypingCaptureService _typing;
     private readonly MessageWindow _messages;
     private readonly PopupWindow _popup;
     private readonly TrayIcon _tray;
@@ -29,9 +34,15 @@ internal sealed class AppHost : IDisposable
         if (firstRun) FirstRunSetup();
         else Guard("repair autostart path", Autostart.RepairPath);
 
-        _store = SqliteHistoryStore.OpenOrRecover(AppPaths.Database, new DpapiProtector(), log);
+        var protector = new DpapiProtector();
+        _store = SqliteHistoryStore.OpenOrRecover(AppPaths.Database, protector, log);
         _history = new HistoryService(_store, _settings.MaxItems, log);
-        _capture = new CaptureService(_history, _settings, log);
+        _capture = new CaptureService(_history, () => _settings, log);
+        _typing = new TypingCaptureService(_history, () => _settings, () => _capture.Paused, log);
+        _typing.AutoOffTriggered += OnTypingAutoOff;
+
+        _snippetStore = SnippetStore.Open(AppPaths.Database, protector, log); // second connection, same file
+        _snippets = new SnippetService(_snippetStore, log);
 
         _popup = new PopupWindow(_history, _settings.FuzzyByDefault);
         _popup.ItemChosen += OnItemChosen;
@@ -40,15 +51,21 @@ internal sealed class AppHost : IDisposable
         _messages.ClipboardUpdated += _capture.OnClipboardUpdated;
         _messages.HotkeyPressed += TogglePopup;
 
+        _snippetHotkeys = new SnippetHotkeyManager(_messages, log);
+        _snippetHotkeys.SnippetTriggered += OnSnippetTriggered;
+        _snippetHotkeys.Apply(_snippets.Items);
+
         _tray = new TrayIcon(SafeAutostartState());
         _tray.OpenRequested += ShowPopup;
         _tray.PauseChanged += OnPauseChanged;
+        _tray.CaptureTypingChanged += OnCaptureTypingChanged;
         _tray.ClearRequested += OnClearRequested;
+        _tray.SettingsRequested += OnSettingsRequested;
         _tray.AutostartChanged += OnAutostartChanged;
         _tray.AboutRequested += ShowAbout;
         _tray.QuitRequested += () => Application.Current.Shutdown();
 
-        log.Info($"started v{Version}, {_history.Items.Count} items loaded");
+        log.Info($"started v{Version}, {_history.Items.Count} items loaded, {_snippets.Items.Count} snippets");
     }
 
     private static string Version => Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "?";
@@ -69,9 +86,13 @@ internal sealed class AppHost : IDisposable
     public void Dispose()
     {
         _showWait?.Unregister(null);
+        _typing.Dispose(); // removes the keyboard hook before anything else goes away
+        _snippetHotkeys.Dispose();
+        _snippetFillLock.Dispose();
         _tray.Dispose();
         _messages.Dispose();
         _popup.Close();
+        _snippetStore.Dispose();
         _store.Dispose();
         _log.Info("stopped");
     }
@@ -143,6 +164,69 @@ internal sealed class AppHost : IDisposable
         _capture.Paused = paused;
         _tray.SetPaused(paused);
         _log.Info(paused ? "capture paused" : "capture resumed");
+    }
+
+    private void OnCaptureTypingChanged(bool on)
+    {
+        if (on) _typing.Start();
+        else _typing.Stop();
+        _tray.SetCapturingTyping(_typing.IsCapturing);
+    }
+
+    /// <summary>The idle timer turned capture off by itself; reflect that in the tray and tell Vitaly once.</summary>
+    private void OnTypingAutoOff()
+    {
+        _typing.Stop();
+        _tray.SetCapturingTyping(false);
+        _tray.ShowInfoBalloon("Typing capture turned off (idle)");
+        _log.Info("typing capture auto-off (idle)");
+    }
+
+    private void OnSnippetTriggered(string snippetId)
+    {
+        var snippet = _snippets.Items.FirstOrDefault(s => s.Id == snippetId);
+        if (snippet is null) return;
+        var target = Native.GetForegroundWindow();
+        FillSnippetAsync(snippet, target);
+    }
+
+    /// <summary>
+    /// One fill at a time: a second hotkey pressed while a fill is mid-flight would read the first
+    /// fill's value off the clipboard as "the previous contents" and restore that instead of the real
+    /// previous clipboard. Rather than queue it (which could paste a snippet into the wrong field
+    /// minutes later), a trigger that arrives while busy is just dropped.
+    /// </summary>
+    private readonly SemaphoreSlim _snippetFillLock = new(1, 1);
+
+    private async void FillSnippetAsync(Snippet snippet, IntPtr target)
+    {
+        if (!_snippetFillLock.Wait(0))
+        {
+            _log.Warn($"snippet '{snippet.Name}' trigger dropped: another fill is already in progress");
+            return;
+        }
+        try { await SnippetFiller.FillAsync(snippet, target, _log); }
+        catch (Exception ex) { _log.Error("snippet fill failed", ex); } // async void: must not escape
+        finally { _snippetFillLock.Release(); }
+    }
+
+    private void OnSettingsRequested()
+    {
+        var window = new SettingsWindow(_settings, _snippets, _snippetHotkeys.UnavailableSnippetIds);
+        window.SettingsSaved += newSettings =>
+        {
+            _settings = newSettings;
+            Guard("save settings", () => SettingsLoader.Save(AppPaths.Settings, _settings));
+
+            _history.SetMaxItems(_settings.MaxItems);
+            _popup.SetFuzzyDefault(_settings.FuzzyByDefault);
+            if (Hotkey.TryParse(_settings.Hotkey, out var hotkey) && hotkey is not null && !_messages.RegisterHotkey(hotkey))
+                _tray.ShowBalloon($"Hotkey {_settings.Hotkey} is taken by another app.");
+            _snippetHotkeys.Apply(_snippets.Items);
+
+            _log.Info("settings saved");
+        };
+        window.ShowDialog();
     }
 
     private void OnClearRequested()

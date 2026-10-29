@@ -29,6 +29,9 @@ internal static class ClipboardAccess
     public static async Task<bool> SetImageAsync(byte[] png, ILog log) =>
         await RetryAsync(() => Write(Wrap(d => d.SetImage(Decode(png)))), log, "write");
 
+    /// <summary>Used when a snippet fill can't faithfully restore the previous clipboard contents, so nothing lingers.</summary>
+    public static Task<bool> ClearAsync(ILog log) => RetryAsync(() => { Clipboard.Clear(); return true; }, log, "clear");
+
     private static Snapshot? Read()
     {
         var data = Clipboard.GetDataObject();

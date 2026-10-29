@@ -160,6 +160,45 @@ public class StoreTests
         Assert.Single(Directory.GetFiles(dir.Path, "history.db.corrupt-*"));
     }
 
+    [Fact]
+    public void TypedEntryRoundTripsItsSource()
+    {
+        using var dir = new TempDir();
+        var path = dir.File("history.db");
+        using var store = SqliteHistoryStore.Open(path, new FakeProtector(), NullLog.Instance);
+        var h = new HistoryService(store, 1000, NullLog.Instance);
+        h.AddText("copied one");
+        h.AddText("typed one", ClipSource.Typed);
+        Assert.Equal(ClipSource.Copied, h.Items[1].Source);
+        Assert.Equal(ClipSource.Typed, h.Items[0].Source);
+    }
+
+    [Fact]
+    public void RowsFromBeforeTheSourceColumnReadAsCopied()
+    {
+        using var dir = new TempDir();
+        var path = dir.File("history.db");
+        // Simulate a v0.1.0 database: open once to create the pre-migration schema shape by hand, with
+        // no "source" column, then open it again through the real store and check the migration is additive.
+        using (var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={path}"))
+        {
+            raw.Open();
+            using var cmd = raw.CreateCommand();
+            cmd.CommandText = """
+                CREATE TABLE items(id INTEGER PRIMARY KEY AUTOINCREMENT, kind INTEGER NOT NULL, hash TEXT NOT NULL,
+                  blob BLOB NOT NULL, pinned INTEGER NOT NULL DEFAULT 0, used_at INTEGER NOT NULL);
+                CREATE TABLE meta(k TEXT PRIMARY KEY, v BLOB NOT NULL);
+                INSERT INTO items(kind,hash,blob,pinned,used_at) VALUES(1,'h1',X'00',0,1);
+                """;
+            cmd.ExecuteNonQuery();
+        }
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+
+        using var store = SqliteHistoryStore.Open(path, new FakeProtector(), NullLog.Instance);
+        var row = Assert.Single(store.LoadAll());
+        Assert.Equal(ClipSource.Copied, row.Source);
+    }
+
     private static void SqliteConnectionPoolClear() => Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
 
     private sealed class RejectingProtector : IProtector

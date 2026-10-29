@@ -16,4 +16,5 @@
   <ItemGroup>
     <ProjectReference Include="..\M4W.Core\M4W.Core.csproj" />
   </ItemGroup>
+  <!-- UIAutomationClient/Types (password-field detection) already ship via UseWPF; no extra reference needed. -->
 </Project>

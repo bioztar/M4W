@@ -24,6 +24,7 @@ internal sealed class PopupItem
     public ClipEntry Entry { get; }
     public string Preview => Entry.Preview;
     public Visibility PinVisibility => Entry.Pinned ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility TypedVisibility => Entry.Source == ClipSource.Typed ? Visibility.Visible : Visibility.Collapsed;
     public Visibility ThumbnailVisibility => Entry.Kind == ClipKind.Image ? Visibility.Visible : Visibility.Collapsed;
 
     public BitmapSource? Thumbnail
