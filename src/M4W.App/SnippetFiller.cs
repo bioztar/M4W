@@ -13,7 +13,10 @@ namespace M4W.App;
 /// </summary>
 internal static class SnippetFiller
 {
-    private const int RestoreDelayMs = 300;
+    // Long enough for a slow paste target (Electron, Word, an RDP session) to actually read the
+    // clipboard before we put the old contents back; the sequence-number check below is the real
+    // guard, this delay just gives it a fair chance to see "unchanged" rather than "too early to tell".
+    private const int RestoreDelayMs = 1000;
 
     public static async Task FillAsync(Snippet snippet, IntPtr target, ILog log)
     {
@@ -29,11 +32,19 @@ internal static class SnippetFiller
             log.Warn($"snippet '{snippet.Name}': clipboard was busy, not filled");
             return;
         }
+        var sequenceAfterFill = Native.GetClipboardSequenceNumber();
 
         await Paster.RestoreFocusAndPasteAsync(target, paste: true, log);
         log.Info($"snippet '{snippet.Name}' filled");
 
         await Task.Delay(RestoreDelayMs);
+        if (Native.GetClipboardSequenceNumber() != sequenceAfterFill)
+        {
+            // Something changed the clipboard after we filled it (a new copy, another snippet, the
+            // target app itself) — restoring now would clobber that, not the snippet value, so leave it.
+            log.Info($"snippet '{snippet.Name}': clipboard changed since fill, not restoring");
+            return;
+        }
         await RestorePreviousClipboardAsync(previous, log);
     }
 
