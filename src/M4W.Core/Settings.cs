@@ -26,8 +26,11 @@ public sealed record AppSettings
     /// </summary>
     public bool CaptureTyping { get; init; } = false;
     public int TypingIdleOffMinutes { get; init; } = 30;
-    /// <summary>The one safety default: a focused password field is never recorded while this is true.</summary>
-    public bool TypingSkipPasswordFields { get; init; } = true;
+    /// <summary>
+    /// Off by default (Vitaly's call, 2026-10-29): he wants everything he types captured, password
+    /// fields included — those are exactly what he forgets. Settable true if he ever wants the skip.
+    /// </summary>
+    public bool TypingSkipPasswordFields { get; init; } = false;
     /// <summary>A typed chunk shorter than this (e.g. a single keystroke) is discarded, not stored.</summary>
     public int MinTypedChars { get; init; } = 3;
     /// <summary>Seconds of no typing before the current buffer is flushed as its own entry.</summary>

@@ -15,7 +15,7 @@ public class SettingsTests
         Assert.False(s.RespectPrivateFlag);
         Assert.False(s.CaptureTyping);
         Assert.Equal(30, s.TypingIdleOffMinutes);
-        Assert.True(s.TypingSkipPasswordFields);
+        Assert.False(s.TypingSkipPasswordFields);
         Assert.Equal(3, s.MinTypedChars);
         Assert.Equal(2, s.IdleFlushSeconds);
     }
@@ -23,14 +23,14 @@ public class SettingsTests
     [Fact]
     public void ValidFileIsHonoured()
     {
-        var s = SettingsLoader.Parse("""{"Hotkey":"ctrl+shift+F5","MaxItems":50,"FuzzyByDefault":false,"AutoPaste":false,"RespectPrivateFlag":true,"TypingIdleOffMinutes":45,"TypingSkipPasswordFields":false,"MinTypedChars":5,"IdleFlushSeconds":4}""", NullLog.Instance);
+        var s = SettingsLoader.Parse("""{"Hotkey":"ctrl+shift+F5","MaxItems":50,"FuzzyByDefault":false,"AutoPaste":false,"RespectPrivateFlag":true,"TypingIdleOffMinutes":45,"TypingSkipPasswordFields":true,"MinTypedChars":5,"IdleFlushSeconds":4}""", NullLog.Instance);
         Assert.Equal("ctrl+shift+F5", s.Hotkey);
         Assert.Equal(50, s.MaxItems);
         Assert.False(s.FuzzyByDefault);
         Assert.False(s.AutoPaste);
         Assert.True(s.RespectPrivateFlag);
         Assert.Equal(45, s.TypingIdleOffMinutes);
-        Assert.False(s.TypingSkipPasswordFields);
+        Assert.True(s.TypingSkipPasswordFields);
         Assert.Equal(5, s.MinTypedChars);
         Assert.Equal(4, s.IdleFlushSeconds);
     }
