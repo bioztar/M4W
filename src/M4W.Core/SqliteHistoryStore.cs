@@ -37,20 +37,44 @@ public sealed class SqliteHistoryStore : IDisposable
         _hashKey = LoadOrCreateHashKey();
     }
 
-    /// <summary>Opens the database; a corrupt file is moved aside and a fresh one created.</summary>
+    private const int SqliteCorrupt = 11;
+    private const int SqliteNotADb = 26;
+
+    /// <summary>Only these mean the file itself is damaged. BUSY, READONLY, IOERR, FULL, CANTOPEN are environmental and must never cost the user their history.</summary>
+    internal static bool IsCorruption(SqliteException ex) => ex.SqliteErrorCode is SqliteCorrupt or SqliteNotADb;
+
+    /// <summary>
+    /// Opens the database and reads every row once, so corruption anywhere surfaces here. A corrupt file
+    /// (and only that) is moved aside and a fresh one created; any other failure is logged and rethrown.
+    /// </summary>
     public static SqliteHistoryStore OpenOrRecover(string path, IProtector protector, ILog log)
     {
         try
         {
-            return Open(path, protector, log);
+            var store = Open(path, protector, log);
+            try
+            {
+                store.LoadAll(); // probe: HistoryService reads this again, outside any recovery
+                return store;
+            }
+            catch
+            {
+                store.Dispose();
+                throw;
+            }
         }
-        catch (SqliteException ex) when (path != ":memory:" && File.Exists(path))
+        catch (SqliteException ex) when (IsCorruption(ex) && path != ":memory:" && File.Exists(path))
         {
             var aside = $"{path}.corrupt-{DateTime.Now:yyyyMMddHHmmss}";
-            log.Error($"history db unreadable, moving to {Path.GetFileName(aside)} and starting fresh", ex);
+            log.Error($"history db corrupt (sqlite code {ex.SqliteErrorCode}), moving to {Path.GetFileName(aside)} and starting fresh", ex);
             SqliteConnection.ClearAllPools();
             File.Move(path, aside);
             return Open(path, protector, log);
+        }
+        catch (SqliteException ex)
+        {
+            log.Error($"history db could not be opened (sqlite code {ex.SqliteErrorCode}); file left untouched", ex);
+            throw;
         }
     }
 

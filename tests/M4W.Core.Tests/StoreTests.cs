@@ -114,6 +114,52 @@ public class StoreTests
         Assert.Contains(log.Lines, l => l.StartsWith("ERROR"));
     }
 
+    [Theory]
+    [InlineData(11, true)]  // CORRUPT
+    [InlineData(26, true)]  // NOTADB
+    [InlineData(5, false)]  // BUSY
+    [InlineData(8, false)]  // READONLY
+    [InlineData(10, false)] // IOERR
+    [InlineData(13, false)] // FULL
+    [InlineData(14, false)] // CANTOPEN
+    public void OnlyCorruptAndNotADbCountAsCorruption(int code, bool expected) =>
+        Assert.Equal(expected, SqliteHistoryStore.IsCorruption(new Microsoft.Data.Sqlite.SqliteException("x", code)));
+
+    [Fact]
+    public void NonCorruptionFailureLeavesFileAloneLogsAndRethrows()
+    {
+        using var dir = new TempDir();
+        var path = dir.File("history.db");
+        Directory.CreateDirectory(path); // sqlite cannot open a directory: CANTOPEN, not corruption
+        var log = new ListLog();
+        Assert.Throws<Microsoft.Data.Sqlite.SqliteException>(() => SqliteHistoryStore.OpenOrRecover(path, new FakeProtector(), log));
+        Assert.True(Directory.Exists(path));
+        Assert.Empty(Directory.GetFileSystemEntries(dir.Path, "history.db.corrupt-*"));
+        Assert.Contains(log.Lines, l => l.StartsWith("ERROR") && l.Contains("left untouched"));
+    }
+
+    [Fact]
+    public void DamagePastTheHeaderIsRecoveredAtOpen()
+    {
+        using var dir = new TempDir();
+        var path = dir.File("history.db");
+        using (var store = SqliteHistoryStore.Open(path, new FakeProtector(), NullLog.Instance))
+        {
+            var h = new HistoryService(store, 1000, NullLog.Instance);
+            for (var i = 0; i < 60; i++) h.AddText($"item {i} " + new string('x', 3000));
+        }
+        SqliteConnectionPoolClear();
+        var bytes = File.ReadAllBytes(path);
+        Assert.True(bytes.Length > 3 * 4096);
+        Array.Fill(bytes, (byte)0xFF, 4096, bytes.Length - 4096); // keep page 1 (schema), wreck the data pages
+        File.WriteAllBytes(path, bytes);
+
+        var log = new ListLog();
+        using var recovered = SqliteHistoryStore.OpenOrRecover(path, new FakeProtector(), log);
+        Assert.Empty(new HistoryService(recovered, 1000, log).Items);
+        Assert.Single(Directory.GetFiles(dir.Path, "history.db.corrupt-*"));
+    }
+
     private static void SqliteConnectionPoolClear() => Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
 
     private sealed class RejectingProtector : IProtector
