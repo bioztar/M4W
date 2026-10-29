@@ -6,6 +6,13 @@ public enum ClipKind
     Image = 1,
 }
 
+/// <summary>Where an entry's text came from. Stored additively; old rows read back as Copied.</summary>
+public enum ClipSource
+{
+    Copied = 0,
+    Typed = 1,
+}
+
 /// <summary>One history item. Image bytes are not held here; load them via <see cref="HistoryService.LoadImage"/>.</summary>
 public sealed record ClipEntry(
     long Id,
@@ -14,7 +21,8 @@ public sealed record ClipEntry(
     string Preview,
     string Hash,
     bool Pinned,
-    long UsedAt);
+    long UsedAt,
+    ClipSource Source = ClipSource.Copied);
 
 /// <summary>Encrypts/decrypts item blobs. App uses DPAPI; tests use a fake.</summary>
 public interface IProtector

@@ -11,7 +11,7 @@ namespace M4W.Core;
 /// </summary>
 public sealed class SqliteHistoryStore : IDisposable
 {
-    public sealed record Row(long Id, ClipKind Kind, string Hash, bool Pinned, long UsedAt, string? Text);
+    public sealed record Row(long Id, ClipKind Kind, string Hash, bool Pinned, long UsedAt, string? Text, ClipSource Source);
 
     private readonly SqliteConnection _db;
     private readonly IProtector _protector;
@@ -34,6 +34,7 @@ public sealed class SqliteHistoryStore : IDisposable
             CREATE INDEX IF NOT EXISTS idx_items_used ON items(used_at DESC);
             CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v BLOB NOT NULL);
             """);
+        MigrateAddSourceColumn();
         _hashKey = LoadOrCreateHashKey();
     }
 
@@ -102,13 +103,14 @@ public sealed class SqliteHistoryStore : IDisposable
         return Convert.ToHexString(h.Hash!);
     }
 
-    public long Insert(ClipKind kind, string hash, byte[] content, long usedAt)
+    public long Insert(ClipKind kind, string hash, byte[] content, long usedAt, ClipSource source = ClipSource.Copied)
     {
-        using var cmd = Command("INSERT INTO items(kind,hash,blob,pinned,used_at) VALUES($k,$h,$b,0,$u); SELECT last_insert_rowid();");
+        using var cmd = Command("INSERT INTO items(kind,hash,blob,pinned,used_at,source) VALUES($k,$h,$b,0,$u,$s); SELECT last_insert_rowid();");
         cmd.Parameters.AddWithValue("$k", (int)kind);
         cmd.Parameters.AddWithValue("$h", hash);
         cmd.Parameters.AddWithValue("$b", _protector.Protect(content));
         cmd.Parameters.AddWithValue("$u", usedAt);
+        cmd.Parameters.AddWithValue("$s", (int)source);
         return (long)cmd.ExecuteScalar()!;
     }
 
@@ -127,7 +129,7 @@ public sealed class SqliteHistoryStore : IDisposable
     public IReadOnlyList<Row> LoadAll()
     {
         var rows = new List<Row>();
-        using var cmd = Command("SELECT id,kind,hash,blob,pinned,used_at FROM items ORDER BY used_at DESC, id DESC");
+        using var cmd = Command("SELECT id,kind,hash,blob,pinned,used_at,source FROM items ORDER BY used_at DESC, id DESC");
         using var r = cmd.ExecuteReader();
         while (r.Read())
         {
@@ -143,7 +145,7 @@ public sealed class SqliteHistoryStore : IDisposable
                     continue;
                 }
             }
-            rows.Add(new Row(id, kind, r.GetString(2), r.GetInt32(4) != 0, r.GetInt64(5), text));
+            rows.Add(new Row(id, kind, r.GetString(2), r.GetInt32(4) != 0, r.GetInt64(5), text, (ClipSource)r.GetInt32(6)));
         }
         return rows;
     }
@@ -162,6 +164,22 @@ public sealed class SqliteHistoryStore : IDisposable
     }
 
     public void Dispose() => _db.Dispose();
+
+    /// <summary>
+    /// Additive migration from v0.1.0: adds the "source" column (defaulting to Copied) if a pre-existing
+    /// database doesn't have it yet. A fresh database already has it from the CREATE TABLE above and this
+    /// is a no-op.
+    /// </summary>
+    private void MigrateAddSourceColumn()
+    {
+        using var probe = Command("PRAGMA table_info(items)");
+        using var r = probe.ExecuteReader();
+        while (r.Read())
+        {
+            if (string.Equals(r.GetString(1), "source", StringComparison.OrdinalIgnoreCase)) return;
+        }
+        Exec("ALTER TABLE items ADD COLUMN source INTEGER NOT NULL DEFAULT 0");
+    }
 
     private byte[] LoadOrCreateHashKey()
     {
