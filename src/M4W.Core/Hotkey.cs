@@ -47,4 +47,16 @@ public sealed record Hotkey(HotkeyModifiers Modifiers, string Key)
 
     /// <summary>Windows virtual-key code for <see cref="Key"/> (letters/digits are their ASCII code, F-keys start at 0x70).</summary>
     public int VirtualKey => Key.Length > 1 && Key[0] == 'F' ? 0x70 + int.Parse(Key[1..]) - 1 : Key[0];
+
+    /// <summary>Canonical "Ctrl+Alt+V" text for this hotkey, for display and re-parsing. <see cref="TryParse"/> is its inverse.</summary>
+    public string ToText()
+    {
+        List<string> parts = [];
+        if (Modifiers.HasFlag(HotkeyModifiers.Ctrl)) parts.Add("Ctrl");
+        if (Modifiers.HasFlag(HotkeyModifiers.Alt)) parts.Add("Alt");
+        if (Modifiers.HasFlag(HotkeyModifiers.Shift)) parts.Add("Shift");
+        if (Modifiers.HasFlag(HotkeyModifiers.Win)) parts.Add("Win");
+        parts.Add(Key);
+        return string.Join('+', parts);
+    }
 }
