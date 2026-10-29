@@ -1,5 +1,25 @@
 # HANDOVER — M4W — 2026-10-29
-## State: v0.2.0 code complete and building clean on macOS (0 warnings); Core green (133/133). Windows-only parts (keyboard hook, snippet hotkeys, Settings window) unverified — need Vitaly's checklist. Local-only, nothing pushed.
+## State: v0.2.0 code complete + helm review fixes applied, building clean on macOS (0 warnings); Core green (133/133). Windows-only parts (keyboard hook, snippet hotkeys, Settings window) unverified — need Vitaly's checklist. Local-only, nothing pushed.
+## helm review fixes (this pass, commits 808dc71..7b2e6fd)
+- **Scope change from Vitaly**: `TypingSkipPasswordFields` default flipped to `false` — he wants
+  everything he types captured, passwords included (those are exactly what he forgets). Setting stays,
+  settable `true`. This supersedes review item #2 (password-skip failing open on focus-change-after-
+  password): no longer a blocker, not hardened further.
+- **#1 FIXED**: char translation was reading modifier state off the wrong thread, after a dispatcher hop
+  — came out lowercase with shift/caps lost. Now reads live GetAsyncKeyState/GetKeyState + the real
+  ScanCode + the foreground window's own layout right in the hook callback (still non-blocking), with
+  ToUnicodeEx's do-not-change-state flag so it never corrupts dead-key state.
+- **#3 FIXED**: snippet fills serialized with a non-blocking SemaphoreSlim(1,1); an overlapping trigger
+  is dropped (logged), never queued.
+- **#4 FIXED**: Paster polls GetAsyncKeyState for Alt/Shift/Win (300ms timeout) before SendCtrlV, so a
+  snippet hotkey's own held modifiers don't turn Ctrl+V into Ctrl+Shift+V in the target.
+- **#5 FIXED**: restore delay raised 300ms→1000ms, and only restores if
+  GetClipboardSequenceNumber is unchanged since right after the fill — if it changed, something else
+  touched the clipboard meanwhile and restoring would clobber that instead.
+- **#6 DOCUMENTED**: snippet clipboard restore only covers text/image; other formats are cleared, not
+  restored. Noted in README + checklist.
+- **DestroyIcon**: verified already correct (shared Render() method's try/finally covers every icon
+  variant including the capturing-state one) — no change needed.
 ## Done this session
 - **Part 1, typing capture:** `TypingBuffer`, `TypingIdleClock`, `TypingPrivacyGuard` in Core (pure,
   tested); `TypingCaptureService` in App installs/removes `WH_KEYBOARD_LL` only while on, hook proc
