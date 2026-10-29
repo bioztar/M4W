@@ -85,16 +85,18 @@ internal sealed class AppHost : IDisposable
     private void ShowPopup()
     {
         var foreground = Native.GetForegroundWindow();
-        // A tray click makes the taskbar the foreground window; pasting "into" it would go nowhere,
-        // so keep the last real window instead.
-        if (foreground != IntPtr.Zero && !IsShellTray(foreground)) _previousWindow = foreground;
+        // Always re-decide the paste target on open. A tray click makes the taskbar the foreground
+        // window (and our own window can be it too); there is no real target then, so clear it rather
+        // than reuse a stale one: the pick is then only put on the clipboard, never pasted.
+        _previousWindow = IsPasteTarget(foreground) ? foreground : IntPtr.Zero;
         _popup.ShowAtCursor();
     }
 
-    private static bool IsShellTray(IntPtr hwnd)
+    private static bool IsPasteTarget(IntPtr hwnd)
     {
+        if (hwnd == IntPtr.Zero || Native.ProcessIdOf(hwnd) == Environment.ProcessId) return false;
         var name = Native.ClassNameOf(hwnd);
-        return name.StartsWith("Shell_", StringComparison.Ordinal) || name.Contains("Overflow", StringComparison.Ordinal);
+        return !name.StartsWith("Shell_", StringComparison.Ordinal) && !name.Contains("Overflow", StringComparison.Ordinal);
     }
 
     private async void OnItemChosen(ClipEntry entry)
@@ -108,6 +110,11 @@ internal sealed class AppHost : IDisposable
             if (!ok)
             {
                 _tray.ShowBalloon("The clipboard was busy, so nothing was pasted. Try again.");
+                return;
+            }
+            if (_previousWindow == IntPtr.Zero)
+            {
+                _log.Info("no paste target (opened from tray), item is on the clipboard");
                 return;
             }
             await Paster.RestoreFocusAndPasteAsync(_previousWindow, _settings.AutoPaste, _log);

@@ -51,6 +51,15 @@ internal static class Native
     private static extern int GetClassName(IntPtr hwnd, System.Text.StringBuilder text, int maxCount);
 
     [DllImport("user32.dll")]
+    public static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
+
+    public static uint ProcessIdOf(IntPtr hwnd)
+    {
+        GetWindowThreadProcessId(hwnd, out var pid);
+        return pid;
+    }
+
+    [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool AllowSetForegroundWindow(int processId);
 
